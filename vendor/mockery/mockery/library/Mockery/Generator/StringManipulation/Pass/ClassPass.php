@@ -20,7 +20,6 @@ class ClassPass implements Pass
 
         $className = ltrim($target->getName(), "\\");
         if (!class_exists($className)) {
-
             $targetCode = '<?php ';
 
             if ($target->inNamespace()) {
@@ -37,6 +36,7 @@ class ClassPass implements Pass
             $tmpfname = tempnam(sys_get_temp_dir(), "Mockery");
             file_put_contents($tmpfname, $targetCode);
             require $tmpfname;
+            \Mockery::registerFileForCleanUp($tmpfname);
         }
 
         $code = str_replace(

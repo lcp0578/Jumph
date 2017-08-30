@@ -5,7 +5,6 @@ namespace Lexik\Bundle\FormFilterBundle\Filter\Doctrine;
 use Lexik\Bundle\FormFilterBundle\Filter\Condition\Condition;
 use Lexik\Bundle\FormFilterBundle\Filter\Query\QueryInterface;
 use Lexik\Bundle\FormFilterBundle\Filter\Doctrine\Expression\DBALExpressionBuilder;
-
 use Doctrine\DBAL\Query\QueryBuilder;
 
 /**
@@ -73,15 +72,31 @@ class DBALQuery implements QueryInterface
     }
 
     /**
-     * Get root alias.
-     *
-     * @return string
+     * {@inheritDoc}
      */
-    public function getAlias()
+    public function getRootAlias()
     {
         $from = $this->queryBuilder->getQueryPart('from');
 
         return $from[0]['alias'];
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function hasJoinAlias($joinAlias)
+    {
+        $joinParts = $this->queryBuilder->getQueryPart('join');
+
+        foreach ($joinParts as $rootAlias => $joins) {
+            foreach ($joins as $join) {
+                if ($join['joinAlias'] === $joinAlias) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

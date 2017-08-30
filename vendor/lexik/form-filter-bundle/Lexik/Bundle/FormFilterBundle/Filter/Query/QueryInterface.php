@@ -29,4 +29,17 @@ interface QueryInterface
      * @return ConditionInterface
      */
     public function createCondition($expression, array $parameters = array());
+
+    /**
+     * Get root alias.
+     *
+     * @return string
+     */
+    public function getRootAlias();
+
+    /**
+     * @param string $joinAlias
+     * @return bool
+     */
+    public function hasJoinAlias($joinAlias);
 }

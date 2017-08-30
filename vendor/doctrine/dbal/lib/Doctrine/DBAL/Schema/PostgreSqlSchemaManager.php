@@ -19,6 +19,7 @@
 
 namespace Doctrine\DBAL\Schema;
 
+use Doctrine\DBAL\Exception\DriverException;
 use Doctrine\DBAL\Types\Type;
 
 /**
@@ -98,6 +99,33 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
         $this->existingSchemaPaths = array_filter($paths, function ($v) use ($names) {
             return in_array($v, $names);
         });
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function dropDatabase($database)
+    {
+        try {
+            parent::dropDatabase($database);
+        } catch (DriverException $exception) {
+            // If we have a SQLSTATE 55006, the drop database operation failed
+            // because of active connections on the database.
+            // To force dropping the database, we first have to close all active connections
+            // on that database and issue the drop database operation again.
+            if ($exception->getSQLState() !== '55006') {
+                throw $exception;
+            }
+
+            $this->_execSql(
+                array(
+                    $this->_platform->getDisallowDatabaseConnectionsSQL($database),
+                    $this->_platform->getCloseActiveDatabaseConnectionsSQL($database),
+                )
+            );
+
+            parent::dropDatabase($database);
+        }
     }
 
     /**
@@ -288,7 +316,7 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
             $autoincrement = true;
         }
 
-        if (preg_match("/^'(.*)'::.*$/", $tableColumn['default'], $matches)) {
+        if (preg_match("/^['(](.*)[')]::.*$/", $tableColumn['default'], $matches)) {
             $tableColumn['default'] = $matches[1];
         }
 
@@ -311,6 +339,7 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
 
         $precision = null;
         $scale = null;
+        $jsonb = null;
 
         $dbType = strtolower($tableColumn['type']);
         if (strlen($tableColumn['domain_type']) && !$this->_platform->hasDoctrineTypeMappingFor($tableColumn['type'])) {
@@ -325,15 +354,18 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
         switch ($dbType) {
             case 'smallint':
             case 'int2':
+                $tableColumn['default'] = $this->fixVersion94NegativeNumericDefaultValue($tableColumn['default']);
                 $length = null;
                 break;
             case 'int':
             case 'int4':
             case 'integer':
+                $tableColumn['default'] = $this->fixVersion94NegativeNumericDefaultValue($tableColumn['default']);
                 $length = null;
                 break;
             case 'bigint':
             case 'int8':
+                $tableColumn['default'] = $this->fixVersion94NegativeNumericDefaultValue($tableColumn['default']);
                 $length = null;
                 break;
             case 'bool':
@@ -369,6 +401,8 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
             case 'decimal':
             case 'money':
             case 'numeric':
+                $tableColumn['default'] = $this->fixVersion94NegativeNumericDefaultValue($tableColumn['default']);
+
                 if (preg_match('([A-Za-z]+\(([0-9]+)\,([0-9]+)\))', $tableColumn['complete_type'], $match)) {
                     $precision = $match[1];
                     $scale = $match[2];
@@ -377,6 +411,11 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
                 break;
             case 'year':
                 $length = null;
+                break;
+
+            // PostgreSQL 9.4+ only
+            case 'jsonb':
+                $jsonb = true;
                 break;
         }
 
@@ -405,6 +444,26 @@ class PostgreSqlSchemaManager extends AbstractSchemaManager
             $column->setPlatformOption('collation', $tableColumn['collation']);
         }
 
+        if (in_array($column->getType()->getName(), [Type::JSON_ARRAY, Type::JSON], true)) {
+            $column->setPlatformOption('jsonb', $jsonb);
+        }
+
         return $column;
+    }
+
+    /**
+     * PostgreSQL 9.4 puts parentheses around negative numeric default values that need to be stripped eventually.
+     *
+     * @param mixed $defaultValue
+     *
+     * @return mixed
+     */
+    private function fixVersion94NegativeNumericDefaultValue($defaultValue)
+    {
+        if (strpos($defaultValue, '(') === 0) {
+            return trim($defaultValue, '()');
+        }
+
+        return $defaultValue;
     }
 }

@@ -46,6 +46,14 @@ abstract class AbstractSQLAnywhereDriver implements Driver, ExceptionConverterDr
     public function convertException($message, DriverException $exception)
     {
         switch ($exception->getErrorCode()) {
+            case '-306':
+            case '-307':
+            case '-684':
+                return new Exception\DeadlockException($message, $exception);
+            case '-210':
+            case '-1175':
+            case '-1281':
+                return new Exception\LockWaitTimeoutException($message, $exception);
             case '-100':
             case '-103':
             case '-832':
@@ -116,7 +124,11 @@ abstract class AbstractSQLAnywhereDriver implements Driver, ExceptionConverterDr
     {
         $params = $conn->getParams();
 
-        return $params['dbname'];
+        if (isset($params['dbname'])) {
+            return $params['dbname'];
+        }
+
+        return $conn->query('SELECT DB_NAME()')->fetchColumn();
     }
 
     /**

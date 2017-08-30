@@ -69,7 +69,10 @@
     },
     "config": {
         "bin-dir": "bin",
-        "process-timeout": 3000
+        "process-timeout": 3000,
+        "platform":{
+            "php": "5.6"
+        }
     },
     "minimum-stability": "stable",
     "extra": {
